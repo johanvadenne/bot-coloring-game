@@ -100,6 +100,8 @@ def refine_frame_end(x1, y1, x2, y2):
 
 
 
+
+
 def calculate_grid_step(frame):
     """
     Calcule la taille des cellules (pas de la grille).
@@ -222,30 +224,27 @@ def check_color(pic, pas):
     x = int(x)
     y = int(y)
 
-    click(x+(pas//2), y+(pas//2))
-    declick()
-
-    # attendre 0.01 seconde
-    time.sleep(0.1)
-
-    # re recuperer la position de l'image
-    x2, y2 = find_pict(pic)
-
-    if x2 == -1 or y2 == -1:
+    if x == -1 or y == -1:
         return False
 
-    x2 = int(x2)
-    y2 = int(y2)
 
-    # si les positions les memes
-    if x == x2 and y == y2:
-        # changer la couleur
-        change_color()
-        return check_color(pic, pas)
+    color = pyautogui.pixel(x, y)
 
-    # sinon
-    else:
-        return True
+    while True:
+
+        click(x+(pas//2), y+(pas//2))
+        declick()
+
+        time.sleep(0.01)
+
+        if color != pyautogui.pixel(x, y):
+            return True
+        else:
+            change_color()
+
+
+
+
 
 
 def color():
