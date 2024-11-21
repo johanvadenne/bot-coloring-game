@@ -4,7 +4,6 @@ import keyboard
 import pyautogui
 from PIL import ImageGrab
 import ctypes
-from ctypes import wintypes
 import time
 import os
 
@@ -13,12 +12,14 @@ class MaErreurPersonnalisee(Exception):
 
 # --- CONSTANTES ---
 OUTPUT_FILE ="screenshot.png"
-DIR_CELLULE ="dossier_cellule_3"
+OUTPUT_FILE_SCREEN_REDUIT ="screenshot_tableau.png"
+DIR_CELLULE ="dossier_cellule"
 OUTPUT_CELL_TEMPLATE =f"{DIR_CELLULE}/cellule_temp&&&.png"
 TIMER =0.001
 
 # Couleurs utilisées dans le jeu
-COLOR_BORDER = (31, 32, 35)
+COLOR_BORDER = np.array([31, 32, 35], dtype=np.uint8)
+COLOR_BORDER_INV = np.array([35, 32, 31], dtype=np.uint8)
 COLOR_INTERIEUR = (198, 198, 196)
 COLOR_EXTERIEUR = (48, 52, 55)
 # Cadre final : (142, 303, 1192, 768)
@@ -52,9 +53,8 @@ def get_position_mouse_pressed_enter():
     return x, y
 
 
-
 # Fonction pour créer et ajuster un cadre basé sur deux clics
-def select_frame():
+def select_frame2():
     """
     Permet à l'utilisateur de sélectionner un cadre en cliquant sur deux coins opposés.
     Ajuste automatiquement les limites pour exclure les bordures inutiles.
@@ -71,54 +71,67 @@ def select_frame():
     x1, x2 = sorted((x1, x2))
     y1, y2 = sorted((y1, y2))
 
+    # utiliser capture_screen pour capturer l'image de tout l'ecran
+    # recuperer la taille de l'ecran
+    screen = pyautogui.size()
+
+
+    capture_screen((0, 0, screen.width, screen.height), "screenshot_non_traite.png")
+
+
     # Ajuster automatiquement le cadre pour inclure uniquement la grille
-    x1, y1 = refine_frame_start(x1, y1, x2, y2)
-    x2, y2 = refine_frame_end(x1, y1, x2, y2)
+    x1, y1 = refine_frame_start2(x1, y1, x2, y2)
+    x2, y2 = refine_frame_end2(x1, y1, x2, y2)
 
     frame = (x1, y1, x2, y2)
     print(f"Cadre final : {frame}")
     return frame
 
-def refine_frame_start(x1, y1, x2, y2):
-    """Affiner le coin supérieur gauche pour éviter les bordures."""
+def refine_frame_start2(x1, y1, x2, y2):
+    """Affiner le coin supérieur gauche pour éviter les bordures en traitant l'image enregistrée."""
+    image = cv2.imread("screenshot_non_traite.png")
+    height, width, _ = image.shape
     for x in range(x1, x2 + 1):
-        for y in range(y1, y1 + ((y2 - y1) // 50)):
-            print(f"Pixel bd ({x}, {y}) : {pyautogui.pixel(x, y)}")
-            if pyautogui.pixel(x, y) == COLOR_BORDER:
+        for y in range(y1, y1 + ((y2 - y1) // 20)):
+            print(f"Pixel hg ({x}, {y}) : {image[y, x]} | {COLOR_BORDER_INV}")
+            # verifier si le pixel est de la couleur de la bordure sur l'image
+            if np.array_equal(image[y, x], COLOR_BORDER_INV):
                 return x, y
-    return x1, y1
+    raise MaErreurPersonnalisee("Coin haut gauche du tableau non trouvé")
 
 
-def refine_frame_end(x1, y1, x2, y2):
-    """Affiner le coin inférieur droit pour éviter les bordures."""
+def refine_frame_end2(x1, y1, x2, y2):
+    """Affiner le coin inférieur droit pour éviter les bordures en traitant l'image enregistrée."""
+    image = cv2.imread("screenshot_non_traite.png")
+    height, width, _ = image.shape
     for x in range(x2, x1 - 1, -1):
         for y in range(y2, y2 - ((y2 - y1) // 50), -1):
-            print(f"Pixel bd ({x}, {y}) : {pyautogui.pixel(x, y)}")
-            if pyautogui.pixel(x, y) == COLOR_BORDER:
+            print(f"Pixel bd ({x}, {y}) : {image[y, x]} | {COLOR_BORDER_INV}")
+            # verifier si le pixel est de la couleur de la bordure sur l'image
+            if np.array_equal(image[y, x], COLOR_BORDER_INV):
                 return x, y
-    return x2, y2
-
-
-
+    raise MaErreurPersonnalisee("Coin bas droit du tableau non trouvé")
 
 
 def calculate_grid_step(frame):
     """
     Calcule la taille des cellules (pas de la grille).
     """
-    x, y = frame[0] + 1, frame[1] + 1
-    while pyautogui.pixel(x, y) != COLOR_BORDER:
+    image = cv2.imread(OUTPUT_FILE_SCREEN_REDUIT)
+    x, y = 1, 1
+    while not np.array_equal(image[y, x], COLOR_BORDER_INV):
         x += 1
-    step = x - frame[0]
+    step = x
     print(f"Pas de la grille : {step} pixels.")
+
     return step
 
 
-def capture_screen(frame):
+def capture_screen(frame, output_file):
     """Capture une image de la région spécifiée par le cadre."""
     screenshot = ImageGrab.grab(frame)
-    screenshot.save(OUTPUT_FILE)
-    print(f"Capture enregistrée : {OUTPUT_FILE}")
+    screenshot.save(output_file)
+    print(f"Capture enregistrée : {output_file}")
 
 
 def extract_cellule(grid_step):
@@ -126,7 +139,7 @@ def extract_cellule(grid_step):
     Divise l'image capturée en cellules uniques et les enregistre.
     """
 
-    image = cv2.imread(OUTPUT_FILE)
+    image = cv2.imread(OUTPUT_FILE_SCREEN_REDUIT)
     height, width, _ = image.shape
     cells = []
     cell_count = 0
@@ -152,45 +165,6 @@ def extract_cellule(grid_step):
                 raise MaErreurPersonnalisee("Trop de cellule")
 
     return cell_count
-
-    def extract_cellule(pas):
-        try:
-            image = cv2.imread(output_file)
-            height, width, _ = image.shape
-            tab_cellule = []
-            nbr_img=0
-
-            x1=0
-            y1=0
-            x2=pas
-            y2=pas
-            pas+=1
-            while True:
-
-                # S'assurer que x2 et y2 ne dépassent pas les dimensions de l'image
-                if x2 > width:
-                    x1 = 0
-                    x2 = pas  # Limiter x2 à la largeur de l'image
-                    y1 += pas  # Limiter y2 à la hauteur de l'image
-                    y2 += pas  # Limiter y2 à la hauteur de l'image
-                if y2 > height:
-                    break
-
-                cell_image = image[y1:y2, x1:x2]
-
-                if not any(np.array_equal(cell_image, existing) for existing in tab_cellule):
-                    if nbr_img > 100:
-                        break
-                    nbr_img+=1
-                    tab_cellule.append(cell_image)
-                    name_img_cell = output_cel_temp.replace("{&&&}", str(nbr_img))
-                    cv2.imwrite(name_img_cell, cell_image)
-
-                x2 += pas
-                x1 += pas
-        except:
-            return 1
-
 
 
 def find_pict(pict):
@@ -235,16 +209,12 @@ def check_color(pic, pas):
         click(x+(pas//2), y+(pas//2))
         declick()
 
-        time.sleep(0.01)
+        time.sleep(0.04)
 
         if color != pyautogui.pixel(x, y):
             return True
         else:
             change_color()
-
-
-
-
 
 
 def color():
@@ -282,12 +252,14 @@ def process_cells(grid_step):
 
         print(f"image : {cell_path}")
         position_all_pict = find_all_pict(cell_path)
+        nbr_cellule_coche = 0
 
         for position in position_all_pict:
 
             x, y = position.left, position.top
             y = int(y + (grid_step // 2))
             x = int(x + (grid_step // 2))
+
             click(x, y)
             time.sleep(TIMER)
 
@@ -297,17 +269,20 @@ def process_cells(grid_step):
             if keyboard.is_pressed('q'):
                 break
 
+            nbr_cellule_coche+=1
             time.sleep(TIMER)
 
         declick()
+        print(f"nombre de cellule colorié: {nbr_cellule_coche}")
 
 
 def main():
     supprimer_fichiers_dossier()
-    cadre = select_frame()
+    cadre = select_frame2()
+    print(f"cadre : {cadre}")
+    capture_screen(cadre, OUTPUT_FILE_SCREEN_REDUIT)
     grid_step = calculate_grid_step(cadre)
     print(f"Le pas de la grille est de {grid_step} pixels.")
-    capture_screen(cadre)
     extract_cellule(grid_step)
     process_cells(grid_step)
 
